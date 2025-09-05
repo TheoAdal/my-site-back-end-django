@@ -144,5 +144,16 @@ SIMPLE_JWT = {
     "BLACKLIST_AFTER_ROTATION": True,
 }
 
-EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
-DEFAULT_FROM_EMAIL = "noreply@example.com"
+# EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+# DEFAULT_FROM_EMAIL = "noreply@example.com"
+
+from decouple import config
+
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = config('HOST')
+EMAIL_PORT = config('EMAIL_PORT', cast=int)
+EMAIL_USE_TLS = config('SECURE', cast=bool)
+EMAIL_USE_SSL = False                   # only if using SSL port (465)
+EMAIL_HOST_USER = config('USER_EMAIL')
+EMAIL_HOST_PASSWORD = config('USER_PASS')
+DEFAULT_FROM_EMAIL = config('USER_EMAIL')
