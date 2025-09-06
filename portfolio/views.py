@@ -10,7 +10,7 @@ from rest_framework.permissions import AllowAny
 from django.conf import settings
 from django.utils import timezone
 from datetime import timedelta
-from .utilities.send_email import send_verification_email
+from .utilities.send_email import send_verification_email, send_reset_password_email
 import uuid
 
 from .models import User
@@ -157,9 +157,9 @@ def logout_user(request):
         refresh_token = request.data.get("refresh")
         token = RefreshToken(refresh_token)
         token.blacklist()
-        return Response({"message": "Logout successful"}, status=205)
+        return Response({"message": "Logout successful", "code":"LOGOUT SUCCESSFUL"}, status=205)
     except TokenError:
-        return Response({"error": "Invalid or expired token"}, status=400)
+        return Response({"message": "Invalid or expired token", "code":"INVALID_OR_EXPIRED_TOKEN"}, status=400)
     except Exception as e:
         return Response({"error": str(e)}, status=400)
     
@@ -198,7 +198,7 @@ def resend_verification(request):
             
             #email field check
             if not email:
-                return JsonResponse({"error": "Email is required"}, status=400)
+                return JsonResponse({"error": "Email is required","code":"EMAIL_REQUIRED"}, status=400)
 
             try:
                 user = User.objects.get(email=email)
@@ -213,14 +213,95 @@ def resend_verification(request):
             user.verification_token_expiry = timezone.now() + timedelta(hours=1)
             user.save()
 
-            verification_link = f"http://localhost:3000/api/verify/{user.verification_token}/"
-
             # send email
             send_verification_email(user)
 
-            return JsonResponse({"message": "A new verification email has been sent."}, status=200)
+            return JsonResponse({"message": "A new verification email has been sent.","code":"NEW_EMAIL_SENT"}, status=200)
 
         except Exception as e:
             return JsonResponse({"error": str(e)}, status=500)
 
-    return JsonResponse({"message": "Invalid request method"}, status=405)
+    return JsonResponse({"message": "Invalid request method","code":"INVALID_REQUEST_METHOD"}, status=405)
+
+#SEND RESET_PASSWORD LINK
+@csrf_exempt
+def forgot_password(request):
+    if request.method == "POST":
+        try:
+            data = json.loads(request.body.decode("utf-8"))
+            email = data.get("email")
+            
+            #email field check
+            if not email:
+                return JsonResponse({"error": "Email is required", "code":"EMAIL_REQUIRED"}, status=400)
+
+            try:
+                user = User.objects.get(email=email)
+            except User.DoesNotExist:
+                return JsonResponse({"message": "If this email is registered, a reset link will be sent.", "code":"USER_NOT_FOUND"}, status=404)
+
+            # set reset_password_token & reset_password_token_expiry
+            user.reset_password_token = uuid.uuid4()
+            user.reset_password_token_expiry = timezone.now() + timedelta(hours=1)
+            user.save(update_fields=["reset_password_token", "reset_password_token_expiry"])
+
+
+            # send email with reset_link
+            send_reset_password_email(user)
+
+            return JsonResponse({"message": "If this email is registered, a reset link will be sent.", "code":"RESET_LINK_SENT"}, status=200)
+
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=500)
+
+    return JsonResponse({"message": "Invalid request method","code":"INVALID_REQUEST_METHOD"}, status=405)
+
+#RESET_PASSWORD CONFIRMATION
+@csrf_exempt
+def reset_password(request, token):
+    if request.method == "POST":
+        try:
+            data = json.loads(request.body.decode("utf-8"))
+            new_password = data.get("password")
+
+            if not new_password:
+                return JsonResponse({
+                    "error": "Password is required",
+                    "code": "PASSWORD_REQUIRED"
+                }, status=400)
+
+            try:
+                user = User.objects.get(reset_password_token=token)
+            except User.DoesNotExist:
+                return JsonResponse({
+                    "message": "Invalid or expired token",
+                    "code": "INVALID_TOKEN"
+                }, status=400)
+
+            # check token expiry
+            if not user.reset_password_token_expiry or user.reset_password_token_expiry < timezone.now():
+                return JsonResponse({
+                    "message": "Invalid or expired token",
+                    "code": "TOKEN_EXPIRED"
+                }, status=400)
+
+            # update new_password safely
+            user.set_password(new_password)
+
+            # clear token after use
+            user.reset_password_token = None
+            user.reset_password_token_expiry = None
+            user.save(update_fields=["password", "reset_password_token", "reset_password_token_expiry"])
+
+            return JsonResponse({
+                "message": "Password reset successful",
+                "code": "PASSWORD_RESET_SUCCESS"
+            }, status=200)
+
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=500)
+
+    return JsonResponse({
+        "message": "Invalid request method",
+        "code": "INVALID_REQUEST_METHOD"
+    }, status=405)

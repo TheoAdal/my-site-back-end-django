@@ -8,4 +8,6 @@ urlpatterns = [
     path("logout/", views.logout_user, name="logout_user"), # logout user
     path("verify/<uuid:token>/", views.verify_user, name="verify"), # verify route
     path("resend-verification/", views.resend_verification, name="resend_verification"), #resend verification email
+    path("forgot-password/", views.forgot_password, name="forgot-password"), #send reset password link
+    path("reset-password/<uuid:token>/", views.reset_password, name="reset-password"), #reset password
 ]

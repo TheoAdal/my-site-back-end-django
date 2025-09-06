@@ -15,6 +15,9 @@ class User(AbstractUser):
     is_verified = models.BooleanField(default=False)
     verification_token = models.UUIDField(default=uuid.uuid4, editable=False, null=True, blank=True)
     verification_token_expiry = models.DateTimeField(null=True, blank=True)
+    reset_password_token = models.UUIDField(null=True, blank=True)
+    reset_password_token_expiry = models.DateTimeField(null=True, blank=True)
+
     
     def __str__(self):
         return self.username
