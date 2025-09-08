@@ -3,15 +3,18 @@ from django.http import JsonResponse
 from rest_framework.response import Response
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework.decorators import api_view, permission_classes
-# from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated
 from django.contrib.auth import authenticate
 from rest_framework_simplejwt.tokens import RefreshToken, TokenError
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny #for public routes like login
 from django.conf import settings
 from django.utils import timezone
 from datetime import timedelta
 from .utilities.send_email import send_verification_email, send_reset_password_email
 import uuid
+from rest_framework import status
+from .serializers import UserUpdateSerializer
+from .decorators import public_api, private_api
 
 from .models import User
 
@@ -21,8 +24,17 @@ from .models import User
 # @api_view(["GET"])
 # @permission_classes([IsAuthenticated])
 
-# GET ALL USERS
-def get_all_users(request):
+# GET ALL USERS #####PUBLIC ROUTE
+@public_api(["GET"])
+def get_all_users_public(request):
+    if request.method == "GET":
+        users = User.objects.all().values("id", "name", "username", "email")
+        return JsonResponse(list(users), safe=False)
+        # return Response(list(users))
+        
+# GET ALL USERS #####PRIVATE ROUTE
+@private_api(["GET"])
+def get_all_users_private(request):
     if request.method == "GET":
         users = User.objects.all().values("id", "name", "username", "email")
         return JsonResponse(list(users), safe=False)
@@ -30,8 +42,7 @@ def get_all_users(request):
 
 
 #REGISTER
-@api_view(["POST"])
-@permission_classes([AllowAny])
+@public_api(["POST"])
 @csrf_exempt 
 def register_user(request):
     if request.method == "POST":
@@ -88,8 +99,7 @@ def register_user(request):
 
 
 #LOGIN
-@api_view(["POST"])
-@permission_classes([AllowAny])
+@public_api(["POST"])
 @csrf_exempt 
 def login_user(request):
     if request.method == "POST":
@@ -150,8 +160,7 @@ def login_user(request):
                     "code": "INVALID_REQUEST_METHOD"}, status=405)
 
 #LOGOUT
-@api_view(["POST"])
-@permission_classes([AllowAny])
+@public_api(["POST"])
 def logout_user(request):
     try:
         refresh_token = request.data.get("refresh")
@@ -305,3 +314,21 @@ def reset_password(request, token):
         "message": "Invalid request method",
         "code": "INVALID_REQUEST_METHOD"
     }, status=405)
+    
+@private_api(["PATCH"])  
+def update_profile(request):
+    user = request.user  #get the logged-in user from the token
+
+    serializer = UserUpdateSerializer(user, data=request.data, partial=True)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(
+            {
+                "message": "Profile updated successfully",
+                "code": "PROFILE_UPDATED",
+                "user": serializer.data,
+            },
+            status=status.HTTP_200_OK
+        )
+
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
